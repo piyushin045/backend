@@ -3,7 +3,7 @@ import {ApiError} from "../utils/ApiError.js"
 import {User} from "../models/user.model.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
 import { ApiResponse } from "../utils/ApiResponse.js";
-
+import jwt from "jsonwebtoken"
 const generateAccessAndRefreshTokens = async(userId) => {
     try {
         const user = await User.findById(userId)
@@ -135,9 +135,15 @@ const loginUser = asyncHandler(async(req,res) => {
 
     const {email , username, password } = req.body
 
-    if(!username || !email ){
+    if(!username && !email ){
         throw new ApiError(400,"username or email is required")
     }
+    
+    // here is an alternate of above code based on logic discussed in video;
+    // if(!(username || email)){
+    // throw new ApiError(400,"username or email is required")}
+    
+    
     
     // find user
 
@@ -164,7 +170,7 @@ const loginUser = asyncHandler(async(req,res) => {
 
     
 
-    const loggedInUser = await user.findById(user._id).
+    const loggedInUser = await User.findById(user._id).
     select("-password -refreshToken")
 
     // for cookies
@@ -191,11 +197,11 @@ const loginUser = asyncHandler(async(req,res) => {
 
 // for logout we have to clear cookies and reset the refresh token
 const logoutUser = asyncHandler(async(req,res) => {
-    User.findByIdAndUpdate(
+    await User.findByIdAndUpdate(
         req.user._id,
         {
-            $set: {
-                refreshToken: undefined
+            $unset: {
+                refreshToken: undefined // this will remove the feild from document
             }
         },
         {
@@ -210,9 +216,66 @@ const logoutUser = asyncHandler(async(req,res) => {
 
     return res
     .status(200)
-    .clearCookie("accessToken", accessToken)
-    .clearCookie("refreshToken", refreshToken)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
     .json(new ApiResponse(200,  {}, "User logged out" ))
+
+
+})
+
+// refresh and access token ka end point
+
+const refreshAccessToken = asyncHandler(async(req,res) => {
+
+    const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
+
+    if(incomingRefreshToken) {
+        throw new ApiError(401,"unauthorised request")
+    }
+
+    // verify the token
+    try {
+        const decodedToken = jwt.verify(
+            incomingRefreshToken,
+            process.env.REFRESH_TOKEN_SECRET
+        )
+        // refresh token is decoded now by using mongodb query we cank find that user
+    
+        const user = await User.findById(decodedToken?._id)
+    
+         if(!user) {
+            throw new ApiError(401,"invalid refresh token")
+        }
+    
+        // now we are matching the token we have previously saved and the token saved in user
+    
+        if(incomingRefreshToken !== user?.refreshToken){
+            throw new ApiError(401, "refresh token is expired or used")
+        } 
+    
+        // if token match then generate new
+    
+        const options = {
+            httpOnly: true,
+            secure: true
+        }
+    
+        const {accessToken, newRefreshToken} = await generateAccessAndRefreshTokens(user._id)
+        
+        return res
+        .status(200)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", newRefreshToken, options)
+        .json(
+            new ApiResponse(
+                200,
+                {accessToken, refreshToken: newRefreshToken}, // same value bhi use kar sakte the
+                "Acess token refreshed"
+            )
+        )
+    } catch (error) {
+        throw new ApiError(401, error?.message || "invalid refresh token")
+    }
 
 
 })
@@ -220,5 +283,6 @@ const logoutUser = asyncHandler(async(req,res) => {
 export {
     registerUser,
     loginUser,
-    logoutUser
+    logoutUser,
+    refreshAccessToken
 }
