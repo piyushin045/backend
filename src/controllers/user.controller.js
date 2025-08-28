@@ -249,7 +249,7 @@ const refreshAccessToken = asyncHandler(async(req,res) => {
     
         // now we are matching the token we have previously saved and the token saved in user
     
-        if(incomingRefreshToken !== user?.refreshToken){
+        if(!incomingRefreshToken !== user?.refreshToken){
             throw new ApiError(401, "refresh token is expired or used")
         } 
     
