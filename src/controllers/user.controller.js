@@ -231,7 +231,7 @@ const refreshAccessToken = asyncHandler(async(req,res) => {
 
     const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
 
-    if(incomingRefreshToken) {
+    if(!incomingRefreshToken) {
         throw new ApiError(401,"unauthorised request")
     }
 
@@ -251,7 +251,7 @@ const refreshAccessToken = asyncHandler(async(req,res) => {
     
         // now we are matching the token we have previously saved and the token saved in user
     
-        if(!incomingRefreshToken !== user?.refreshToken){
+        if(incomingRefreshToken !== user?.refreshToken){
             throw new ApiError(401, "refresh token is expired or used")
         } 
     
@@ -262,7 +262,7 @@ const refreshAccessToken = asyncHandler(async(req,res) => {
             secure: true
         }
     
-        const {accessToken, newRefreshToken} = await generateAccessAndRefreshTokens(user._id)
+        const {accessToken, refreshToken: newRefreshToken } = await generateAccessAndRefreshTokens(user._id)
         
         return res
         .status(200)
@@ -400,7 +400,7 @@ const getUserChannelProfile = asyncHandler(async(req,res) =>
 {
     const {username} = req.params
 
-    if(!username?.trim){
+    if(!username?.trim()){
         throw new ApiError(400,"username is missing")
     }
 
@@ -436,7 +436,7 @@ const getUserChannelProfile = asyncHandler(async(req,res) =>
                 },
                 isSubscribed: {
                     $cond: {
-                        if: {$in: [req.user?._id, "subscribers.subscriber"]},
+                        if: { $in: [req.user?._id, "$subscribers.subscriber"] },
                         then: true,
                         else: false
                     }
@@ -458,8 +458,8 @@ const getUserChannelProfile = asyncHandler(async(req,res) =>
 
     ])
 
-    if(!channel?.length) {
-        throw new ApiError(400, "channel does not exists")
+    if(!channel || channel.length ===0) {
+        throw new ApiError(404, "channel does not exists")
     }
 
     return res.status(200)
